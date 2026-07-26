@@ -1,0 +1,128 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: NuGet package version to publish. Defaults to tag version or the project Version.
+        required: false
+        type: string
+      publish_to_nuget:
+        description: Push package to nuget.org using NUGET_API_KEY.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PACKAGE_PROJECT: src/VNBrokers/VNBrokers.csproj
+  PACKAGE_OUTPUT: artifacts/packages
+
+jobs:
+  publish:
+    name: Build, pack, and publish
+    runs-on: ubuntu-latest
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/*.sln', 'global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version_input='${{ inputs.package_version }}'
+          release_tag='${{ github.event.release.tag_name }}'
+
+          if [[ -n "$version_input" ]]; then
+            version="$version_input"
+          elif [[ -n "$release_tag" ]]; then
+            version="${release_tag#v}"
+          elif [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(grep -oPm1 '(?<=<Version>)[^<]+' "$PACKAGE_PROJECT")"
+          fi
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid package version: $version" >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved package version: $version"
+
+      - name: Restore
+        run: dotnet restore VNBrokers.sln --locked-mode || dotnet restore VNBrokers.sln
+
+      - name: Build
+        run: dotnet build VNBrokers.sln --configuration Release --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test VNBrokers.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory artifacts/test-results
+
+      - name: Pack NuGet package
+        run: >-
+          dotnet pack "$PACKAGE_PROJECT"
+          --configuration Release
+          --no-build
+          --output "$PACKAGE_OUTPUT"
+          -p:PackageVersion=${{ steps.version.outputs.version }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnbrokers-dotnet-${{ steps.version.outputs.version }}
+          path: |
+            ${{ env.PACKAGE_OUTPUT }}/*.nupkg
+            artifacts/test-results/**/*.trx
+          if-no-files-found: error
+
+      - name: Publish package to nuget.org
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_to_nuget) && env.NUGET_API_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for package in "$PACKAGE_OUTPUT"/*.nupkg; do
+            dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
+
+      - name: Attach packages to GitHub Release
+        if: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')) }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PACKAGE_OUTPUT }}/*.nupkg
+          fail_on_unmatched_files: true
