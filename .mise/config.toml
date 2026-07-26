@@ -35,8 +35,8 @@ description = "Sonar Scanner (set SONAR_HOST_URL, SONAR_TOKEN; optionally SONAR_
 run = """
 dotnet sonarscanner begin \
   /k:"${SONAR_PROJECT_KEY:-vnbrokers_vnbrokers-dotnet}" \
-  /o: "${SONAR_ORGANIZATION:-vnbrokers}" \
-  /d:sonar.host.url="$SONAR_HOST_URL" \
+  /o:"${SONAR_ORGANIZATION:-vnbrokers}" \
+  /d:sonar.host.url="${SONAR_HOST_URL:-}" \
   /d:sonar.token="$SONAR_TOKEN" \
   /d:sonar.exclusions=tests/**,examples/** \
   /d:sonar.sources=src/ \
