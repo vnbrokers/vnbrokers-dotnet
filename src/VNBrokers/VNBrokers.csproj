@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>VNBrokers</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>VNBrokers</Authors>
     <Description>Multi-broker SDK for Vietnamese securities companies.</Description>
     <RepositoryType>git</RepositoryType>
