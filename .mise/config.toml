@@ -1,0 +1,59 @@
+[tools]
+dotnet = "8"
+lefthook = "2.1.9"
+
+[tasks.build]
+description = "Build entire solution"
+run = "dotnet build VNBrokers.sln"
+
+[tasks.build-project]
+description = "Build a single project"
+run = "dotnet build src/VNBrokers/VNBrokers.csproj"
+
+[tasks.build-release]
+description = "Build with Release configuration"
+run = "dotnet build -c Release"
+
+[tasks.publish]
+description = "Publish project to ./publish"
+run = "dotnet publish src/VNBrokers/VNBrokers.csproj -c Release -o ./publish"
+
+[tasks.restore]
+description = "Restore NuGet packages"
+run = "dotnet restore"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "dotnet clean"
+
+[tasks.all]
+description = "Clean → Restore → Build Release"
+depends = ["clean", "restore", "build-release"]
+
+[tasks.sonar-start]
+description = "Sonar Scanner (set SONAR_HOST_URL, SONAR_TOKEN; optionally SONAR_PROJECT_KEY, SONAR_ORGANIZATION)"
+run = """
+dotnet sonarscanner begin \
+  /k:"${SONAR_PROJECT_KEY:-vnbrokers_vnbrokers-dotnet}" \
+  /o:"${SONAR_ORGANIZATION:-vnbrokers}" \
+  /d:sonar.host.url="${SONAR_HOST_URL:-}" \
+  /d:sonar.token="$SONAR_TOKEN" \
+  /d:sonar.exclusions=tests/**,examples/** \
+  /d:sonar.sources=src/ \
+  /d:sonar.tests=tests/ \
+  /d:sonar.branch.name="dev" \
+  /d:sonar.sourceEncoding=UTF-8 \
+  /d:sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml
+"""
+
+
+[tasks.sonar-end]
+description = "Sonar Scanner"
+run = """
+dotnet sonarscanner end \
+  /d:sonar.token="$SONAR_TOKEN"
+"""
+
+[tasks.sonar]
+description = "Start → Build → End"
+run = [{ task = "sonar-start" }, { task = "build" }, { task = "sonar-end" }]
