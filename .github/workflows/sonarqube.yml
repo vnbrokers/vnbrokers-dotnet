@@ -76,7 +76,7 @@ jobs:
           ls -al $COVERAGE_OUTPUT
 
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: unit-test-coverage
           path: ${{ env.COVERAGE_OUTPUT }}
